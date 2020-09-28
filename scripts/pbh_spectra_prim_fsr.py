@@ -12,39 +12,10 @@ import matplotlib.pyplot as plt
 ALPHA_EM = 1.0 / 137.035999  # Fine structure constant
 M_ELECTRON = 0.5019989500e-3  # Electron mass in GeV
 
-BH_RESULTS_DIR = "/home/logan/Research/GECCO/blackhawk_v1.2/results"
-DATA_OUT_DIR = "/home/logan/Research/GECCO/scripts"
-
-
-def dir_to_mass_str(d):
-    """
-    Parse the directory and extract the PBH mass as a string
-    """
-    return d.split("/")[-1].split("_")[1][:-1]
-
-
-def dir_to_mass(d):
-    """
-    Hook into the 'parameters.txt' file located in the directory and extract
-    the PBH mass.
-    """
-    with open(os.path.join(d, "parameters.txt")) as f:
-        lines = f.readlines()
-        for line in lines:
-            if line[:4] == "Mmin":
-                return float(line.split("=")[1])
-        raise RuntimeError(
-            "Could not find PBH mass in: " + d + "/parameters.txt"
-        )
-
-
-def get_data_directories():
-    """
-    Find all of the data directories containing results from BlackHawk.
-    """
-    dirs = [x[0] for x in os.walk(BH_RESULTS_DIR)][1:]
-    dirs.sort(key=dir_to_mass)
-    return dirs
+# path to the directory containing data from collected blackhawk results.
+RESULTS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "results"
+)
 
 
 def ap_spec(photon_energy, fermion_energy, fermion_mass):
@@ -98,33 +69,43 @@ def compute_electron_spectrum(
     return np.trapz(integrand, electron_energies)
 
 
-def generate_data():
+def generate_data(df_photon, df_electron):
     """
-    Extract data from BlackHawk results and create a pandas DataFrame
-    containing the photon energies in the first column and gamma-ray spectra
-    for various black-hole masses in the remaining columns.
+    Generate data for for black-hole spectrum + electron FSR given data
+    containing primary photon and electron spectra from the evaporation of
+    black-holes with various masses. The primary photon and electron must
+    have the same energies and same black-hole masses.
+
+    Parameters
+    ----------
+    df_photon: pandas.DataFrame
+        DataFrame containing the data for the primary photon spectra.
+    df_electron: pandas.DataFrame
+        DataFrame containing the data for the primary electron spectra.
+
+    Returns
+    -------
+    df_new: pandas.DataFrame
+        New pandas DataFrame containing the primary photon spectrum + FSR
+        spectrum off electron.
     """
-    dirs = get_data_directories()
+    df_new = df_photon.copy()
 
-    all_data_pri = {"photon_energies": None}
+    energies = np.array(df_photon["energies"])
+    primary_photon_spectra = df_photon.drop(["energies"], axis=1)
+    primary_electron_spectra = df_electron.drop(["energies"], axis=1)
 
-    for i in tqdm(range(len(dirs))):
-        d = dirs[i]
-        path_pri = os.path.join(d, "instantaneous_primary_spectra.txt")
-        engs, spec_photon, dnde_e = (
-            np.genfromtxt(path_pri, skip_header=2).T[0],
-            np.genfromtxt(path_pri, skip_header=2).T[1],
-            np.genfromtxt(path_pri, skip_header=2).T[7],
-        )
+    columns = primary_photon_spectra.columns
 
-        if i == 0:
-            all_data_pri["photon_energies"] = engs
+    for i in tqdm(range(len(columns))):
+        col = columns[i]
+        dnde_e = np.array(primary_electron_spectra[col])
+        dnde_g = np.array(primary_photon_spectra[col])
+        dnde_fsr = compute_electron_spectrum(energies, energies, dnde_e)
+        dnde_tot = dnde_g + dnde_fsr
+        df_new[columns[i]] = dnde_tot
 
-        spec_electron = compute_electron_spectrum(engs, engs, dnde_e)
-        spec = spec_photon + spec_electron
-        all_data_pri[dir_to_mass_str(d)] = spec
-
-    return pd.DataFrame(all_data_pri)
+    return df_new
 
 
 def plot_data(df):
@@ -133,12 +114,12 @@ def plot_data(df):
     """
     plt.figure(dpi=100)
 
-    energies = df["photon_energies"]
-    print(df.columns)
-    for col in df.columns:
-        if col != "photon_energies":
-            spec = df[col]
-            plt.plot(energies, energies ** 2 * spec)
+    energies = np.array(df["energies"])
+    df_spectra = df.drop(["energies"], axis=1)
+    print(df_spectra.columns)
+    for col in df_spectra.columns:
+        spec = np.array(df_spectra[col])
+        plt.plot(energies, energies ** 2 * spec)
 
     plt.xlim([1e-6, 1])
     plt.ylim([1e1, 1e20])
@@ -148,7 +129,16 @@ def plot_data(df):
 
 
 if __name__ == "__main__":
-    df = generate_data()
-    df.to_csv(os.path.join(DATA_OUT_DIR, "spectra.csv"))
-    plot_data(df)
+    df_photon = pd.read_csv(
+        os.path.join(RESULTS_DIR, "dnde_photon_primary.csv")
+    )
+    df_electron = pd.read_csv(
+        os.path.join(RESULTS_DIR, "dnde_electron_primary.csv")
+    )
+
+    df_tot = generate_data(df_photon, df_electron)
+    df_tot.to_csv(
+        os.path.join(RESULTS_DIR, "dnde_photon_primary_with_fsr.csv")
+    )
+    plot_data(df_tot)
 

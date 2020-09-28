@@ -5,13 +5,24 @@ Script for generating plots of the gamma-ray spectra from PBHs
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
+import os
 from scipy.interpolate import UnivariateSpline
 from hazma.decay import neutral_pion, muon, charged_pion
 from hazma.parameters import neutral_pion_mass as mpi0
 from hazma.parameters import charged_pion_mass as mpi
 
-GOLD_RATIO = (1.0 + np.sqrt(5)) / 2.0
 
+# path to the directory containing data from collected blackhawk results.
+RESULTS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "results"
+)
+
+# path to the directory containing data from collected blackhawk results.
+FIGURES_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "figures"
+)
+
+GOLD_RATIO = (1.0 + np.sqrt(5)) / 2.0
 
 mass_conversion = 5.60958884e23  # g to GeV
 time_conversion = 1.519267407e24  # s to GeV^(-1)
@@ -36,6 +47,7 @@ M_ELECTRON = 0.5109989461e-3
 M_MUON = 105.6583745e-3
 M_PION = mpi0 * 1e-3
 M_PIONP = mpi * 1e-3
+
 ALPHA_EM = 1.0 / 137.0  # Fine structure constant
 
 
@@ -94,13 +106,13 @@ def get_greybody_factors(spin2):
         Greybody factors corresponding to the particle energy in `energies`.
     """
     if spin2 == 0:
-        fname = "/home/logan/Research/GECCO/blackhawk_v1.2/src/tables/gamma_tables/spin_0.txt"
+        fname = os.path.join(RESULTS_DIR, "greybody_spin_0.txt")
     elif spin2 == 1:
-        fname = "/home/logan/Research/GECCO/blackhawk_v1.2/src/tables/gamma_tables/spin_0_5.txt"
+        fname = os.path.join(RESULTS_DIR, "greybody_spin_0.5.txt")
     elif spin2 == 2:
-        fname = "/home/logan/Research/GECCO/blackhawk_v1.2/src/tables/gamma_tables/spin_1.txt"
+        fname = os.path.join(RESULTS_DIR, "greybody_spin_1.txt")
     elif spin2 == 4:
-        fname = "/home/logan/Research/GECCO/blackhawk_v1.2/src/tables/gamma_tables/spin_2.txt"
+        fname = os.path.join(RESULTS_DIR, "greybody_spin_2.txt")
     else:
         raise ValueError("Only 2*spin = 0, 1, 2 and 4 are available.")
 
@@ -263,70 +275,77 @@ def compute_muon_spectrum(photon_energies, muon_energies, dnde_muon):
 
 if __name__ == "__main__":
     # Load the data
-    masses = [r"1e15", r"1e16", r"1e17", r"1e18"]
-    m_pbhs = np.array([1e15, 1e16, 1e17, 1e18]) * mass_conversion
-    pri_files = [
-        "/home/logan/Research/GECCO/blackhawk_v1.2/results/MPBH_"
-        + mass
-        + ".0g/instantaneous_primary_spectra.txt"
-        for mass in masses
-    ]
-    sec_files = [
-        "/home/logan/Research/GECCO/blackhawk_v1.2/results/MPBH_"
-        + mass
-        + ".0g/instantaneous_secondary_spectra.txt"
-        for mass in masses
-    ]
+    pri_file = os.path.join(RESULTS_DIR, "mpbh_1e13g_primary.txt")
+    sec_file = os.path.join(RESULTS_DIR, "mpbh_1e13g_secondary.txt")
+    m_pbh = 1e13 * mass_conversion
 
-    plt.figure(dpi=150, figsize=(7, 7 / GOLD_RATIO))
+    car_es, car_spec = np.genfromtxt(
+        os.path.join(RESULTS_DIR, "pbh_spec_egrb.csv"), delimiter=","
+    ).T
 
-    labels = [r"10^{15}", r"10^{16}", r"10^{17}", r"10^{18}"]
-    labels = [
-        r"$M_{\mathrm{PBH}}=" + lab + r" \ \mathrm{g}$" for lab in labels
-    ]
-    colors = ["steelblue", "firebrick", "goldenrod", "mediumorchid"]
+    plt.figure(dpi=150)
 
-    for i, (pri_file, sec_file, lab, m_pbh) in enumerate(
-        zip(pri_files, sec_files, labels, m_pbhs)
-    ):
-        # Photon spectrum
-        engs, spec = np.genfromtxt(sec_file, skip_header=2).T[:2]
-        # Photon + Electron + muon primary spectra
-        engs_pri, dnde_g, dnde_e, dnde_mu = (
-            np.genfromtxt(pri_file, skip_header=2).T[0],
-            np.genfromtxt(pri_file, skip_header=2).T[1],
-            np.genfromtxt(pri_file, skip_header=2).T[7],
-            np.genfromtxt(pri_file, skip_header=2).T[8],
-        )
+    # Photon spectrum
+    engs, spec = np.genfromtxt(sec_file, skip_header=2).T[:2]
+    # Photon + Electron + muon primary spectra
+    engs_pri, dnde_g, dnde_e, dnde_mu = (
+        np.genfromtxt(pri_file, skip_header=2).T[0],
+        np.genfromtxt(pri_file, skip_header=2).T[1],
+        np.genfromtxt(pri_file, skip_header=2).T[7],
+        np.genfromtxt(pri_file, skip_header=2).T[8],
+    )
 
-        spec_electron = compute_electron_spectrum(engs_pri, engs_pri, dnde_e)
-        spec_muon = compute_muon_spectrum(engs_pri, engs_pri, dnde_mu)
-        spec_pion = compute_pion_spectrum(engs_pri, m_pbh)
-        spec2 = spec_electron + dnde_g + spec_pion
+    spec_electron = compute_electron_spectrum(engs_pri, engs_pri, dnde_e)
+    spec_muon = compute_muon_spectrum(engs_pri, engs_pri, dnde_mu)
+    spec_pion = compute_pion_spectrum(engs_pri, m_pbh)
+    spec_cpion = compute_cpion_spectrum(engs_pri, m_pbh)
+    spec2 = spec_electron + dnde_g + spec_muon + spec_pion + spec_cpion
 
-        plt.plot(engs, engs * spec, ls="--", c=colors[i])
-        plt.plot(engs_pri, engs_pri * spec2, ls="-", c=colors[i])
-        # plt.plot(engs_pri, engs_pri ** 2 * spec_muon, ls=":")
-        # plt.plot(engs_pri, engs_pri ** 2 * spec_pion, ls=":")
+    plt.plot(
+        engs_pri,
+        dnde_g,
+        ls="--",
+        lw=1,
+        c="steelblue",
+        label=r"$\mathrm{BH}_{\mathrm{prim}}$",
+    )
+    plt.plot(
+        engs,
+        spec,
+        ls="--",
+        lw=2,
+        c="steelblue",
+        label=r"$\mathrm{BH}_{\mathrm{sec}}$",
+    )
+    plt.plot(
+        engs_pri,
+        spec2,
+        ls="-",
+        lw=2,
+        c="steelblue",
+        label=r"$\mathrm{BH}_{\mathrm{prim}}+\mathrm{Decay}+\mathrm{FSR}$",
+    )
+    plt.plot(engs_pri, spec_muon, ls="-.", label=r"$\mu^{\pm}$", c="goldenrod")
+    plt.plot(engs_pri, spec_pion, ls=":", label=r"$\pi^{0}$", c="mediumorchid")
+    plt.plot(engs_pri, spec_cpion, ls=":", label=r"$\pi^{\pm}$", c="teal")
+    plt.plot(
+        car_es, car_spec, ls=":", lw=2, c="firebrick", label=r"Car et. al.",
+    )
 
-    plt.xlim([1e-6, 1])
-    plt.ylim([1e7, 1e22])
+    plt.xlim([1e-3, 20])
+    plt.ylim([1e19, 1e26])
     plt.yscale("log")
     plt.xscale("log")
     plt.ylabel(
-        r"$E_{\gamma} \frac{dN_{\gamma}}{dE_{\gamma}dt} \ (\mathrm{GeV}\mathrm{s}^{-1})$",
+        r"$\frac{dN_{\gamma}}{dE_{\gamma}dt} \ (\mathrm{GeV}\mathrm{s}^{-1})$",
         fontsize=16,
     )
     plt.xlabel(r"$E_{\gamma} \ (\mathrm{GeV})$", fontsize=16)
-
-    lines = [Line2D([], [], color=colors[i]) for i in range(len(labels))]
-    lines.append(Line2D([], [], color="k", ls="-",))
-    lines.append(Line2D([], [], color="k", ls="--"))
-    labels.append(r"$\mathrm{BH}_{\mathrm{prim}}+\mathrm{FSR}$")
-    labels.append(r"$\mathrm{BH}_{\mathrm{sec}}$")
-    plt.legend(lines, labels)
+    plt.legend()
 
     plt.tight_layout()
     # plt.show()
-    plt.savefig("/home/logan/Research/GECCO/figures/PBH_spectra.pdf")
+    plt.savefig(
+        os.path.join(FIGURES_DIR, "PBH_spectra_prim_fsr_decay_1GeV.pdf")
+    )
 
