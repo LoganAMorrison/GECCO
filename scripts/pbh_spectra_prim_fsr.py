@@ -8,65 +8,11 @@ import os
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
-ALPHA_EM = 1.0 / 137.035999  # Fine structure constant
-M_ELECTRON = 0.5019989500e-3  # Electron mass in GeV
-
-# path to the directory containing data from collected blackhawk results.
-RESULTS_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "results"
+from utils import (
+    RESULTS_DIR,
+    FIGURES_DIR,
+    compute_electron_spectrum,
 )
-
-
-def ap_spec(photon_energy, fermion_energy, fermion_mass):
-    """
-    Compute the Altarelli-Parisi spectrum from a fermion.
-
-    Parameters
-    ----------
-    photon_energy: float
-        Energy of the photon.
-    fermion_energy: float
-        Energy of the radiating fermion.
-    fermion_mass: float
-        Mass of the radiating fermion.
-
-    Returns
-    -------
-    dnde: float
-        Photon spectrum at `photon_energy`.
-    """
-    Q = 2.0 * fermion_energy
-    x = 2 * photon_energy / Q
-    mu = fermion_mass / Q
-    if 0.0 < x < 1.0:
-        split = (1.0 + (1.0 - x) ** 2) / x
-        log = np.log((1.0 - x) / mu ** 2) - 1.0
-        if log < 0.0:
-            return 0.0
-        else:
-            return ALPHA_EM / np.pi * split * log / Q
-    else:
-        return 0.0
-
-
-def compute_electron_spectrum(
-    photon_energies, electron_energies, dnde_electron
-):
-    """
-    Compute the FSR spectrum off electron evaporated from a PBH.
-    """
-
-    integrand = np.array(
-        [
-            [
-                dnde_e * ap_spec(eg, ee, M_ELECTRON)
-                for (ee, dnde_e) in zip(electron_energies, dnde_electron)
-            ]
-            for eg in photon_energies
-        ]
-    )
-    return np.trapz(integrand, electron_energies)
 
 
 def generate_data(df_photon, df_electron):
