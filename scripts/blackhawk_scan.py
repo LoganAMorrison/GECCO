@@ -40,7 +40,7 @@ if __name__ == "__main__":
     secondary_photon = {"energies": None}
     secondary_electron = {"energies": None}
 
-    masses = np.geomspace(1e15, 1e18, 73)
+    masses = np.geomspace(1e15, 6e18, 100)
     blackhawk = BlackHawk(masses[0])
     for i in tqdm.tqdm(range(len(masses))):
         mass = masses[i]

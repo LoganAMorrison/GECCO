@@ -1,6 +1,12 @@
+"""
+Various utilities for generating gamma-ray spectra from evaporating
+black-holes using `BlackHawk`.
+"""
+
 import numpy as np
 import os
 import subprocess
+from typing import List
 from hazma.parameters import (
     neutral_pion_mass as _mpi0,
     charged_pion_mass as _mpi,
@@ -14,17 +20,17 @@ from hazma.decay import (
 )
 
 # Convert grams to GeV
-mass_conversion = 5.60958884e23
+MASS_CONVERSION = 5.60958884e23
 # Convert seconds to GeV^-1
-time_conversion = 1.519267407e24
+TIME_CONVERSION = 1.519267407e24
 # Convert cm to GeV^-1
-leng_conversion = 5.06773058e13
+LENGTH_CONVERSION = 5.06773058e13
 # Newton constant in GeV
 G_NEWTON = (
     6.67408e-11
-    * pow(leng_conversion * 100.0, 3.0)
-    / (mass_conversion * 1000.0)
-    / pow(time_conversion, 2.0)
+    * (LENGTH_CONVERSION * 100.0) ** 3
+    / (MASS_CONVERSION * 1000.0)
+    / TIME_CONVERSION ** 2
 )
 # Planck mass in GeV
 M_PLANK = 1.221e19
@@ -48,7 +54,43 @@ FIGURES_DIR = os.path.join(
 )
 
 
-def ap_spec(photon_energy, energy, mass, spin2):
+def temperature_to_mass(temperature: float) -> float:
+    """
+    Convert the temperature of a black-hole to its mass.
+
+    Parameters
+    ----------
+    temperature: float
+        Temperature of the black-hole in GeV.
+
+    Returns
+    -------
+    mass: float
+        Mass of the black-hole in GeV.
+    """
+    return 1.0 / (8.0 * np.pi * G_NEWTON * temperature)
+
+
+def mass_to_temperature(mass: float) -> float:
+    """
+    Convert the mass of a black-hole to its temperature.
+
+    Parameters
+    ----------
+    mass: float
+        Mass of the black-hole in GeV.
+
+    Returns
+    -------
+    temperature: float
+        Temperature of the black-hole in GeV.
+    """
+    return 1.0 / (8.0 * np.pi * G_NEWTON * mass)
+
+
+def ap_spec(
+    photon_energy: float, energy: float, mass: float, spin2: int
+) -> float:
     """
     Compute the Altarelli-Parisi spectrum from a charged particle.
 
@@ -81,13 +123,11 @@ def ap_spec(photon_energy, energy, mass, spin2):
         log = np.log((1.0 - x) / mu ** 2) - 1.0
         if log < 0.0:
             return 0.0
-        else:
-            return ALPHA_EM / np.pi * split * log / Q
-    else:
-        return 0.0
+        return ALPHA_EM / np.pi * split * log / Q
+    return 0.0
 
 
-def get_greybody_factors(spin2, mpbh):
+def get_greybody_factors(spin2: int, mpbh: float):
     """
     Get the greybody factors for a particle with a spin equal to `spin2/2`
     evaporating from a black-hole with mass mpbh (in GeV).
@@ -128,7 +168,7 @@ def get_greybody_factors(spin2, mpbh):
     return xs / (2.0 * G_NEWTON * mpbh), gbs
 
 
-def __dnde_neutral_pion(egam, epi):
+def __dnde_neutral_pion(egam: float, epi: float) -> float:
     """
     Compute the spectrum from the decay of a neutral pion.
     """
@@ -137,7 +177,7 @@ def __dnde_neutral_pion(egam, epi):
     return _decay_pi0(egam * 1e3, epi * 1e3) * 1e3
 
 
-def __dnde_charged_pion(egam, epi):
+def __dnde_charged_pion(egam: float, epi: float) -> float:
     """
     Compute the spectrum from the decay of a neutral pion.
     """
@@ -149,8 +189,11 @@ def __dnde_charged_pion(egam, epi):
 
 
 def convolve_spectrum(
-    photon_energies, particle_energies, particle_dist, particle_dnde
-):
+    photon_energies: List[float],
+    particle_energies: List[float],
+    particle_dist: List[float],
+    particle_dnde: List[float],
+) -> List[float]:
     """
     Compute the convolved gamma-ray spectrum of a particle evaporating from
     a black-hole.
@@ -185,7 +228,9 @@ def convolve_spectrum(
     return np.trapz(integrand, particle_energies)
 
 
-def compute_neutral_pion_spectrum(photon_energies, mpbh):
+def compute_neutral_pion_spectrum(
+    photon_energies: List[float], mpbh: float
+) -> List[float]:
     """
     Compute the secondary gamma-ray spectrum produced from a black-hole
     evaporating into neutral pions.
@@ -205,14 +250,16 @@ def compute_neutral_pion_spectrum(photon_energies, mpbh):
     #   Gamma / (e^E/T - 1),
     # with all units in GeV. So we divide by 2pi and convert GeV to time to get
     # units of (GeV^-1 s^-1)
-    dnde_pis = greybodies / (2.0 * np.pi) * time_conversion
+    dnde_pis = greybodies / (2.0 * np.pi) * TIME_CONVERSION
 
     return convolve_spectrum(
         photon_energies, pion_energies, dnde_pis, __dnde_neutral_pion
     )
 
 
-def compute_charged_pion_spectrum(photon_energies, mpbh):
+def compute_charged_pion_spectrum(
+    photon_energies: List[float], mpbh: float
+) -> List[float]:
     """
     Compute the secondary gamma-ray spectrum produced from a black-hole
     evaporating into charged pions.
@@ -232,7 +279,7 @@ def compute_charged_pion_spectrum(photon_energies, mpbh):
     #   Gamma / (e^E/T - 1),
     # with all units in GeV. So we divide by 2pi and convert GeV to time to get
     # units of (GeV^-1 s^-1)
-    dnde_pis = 2.0 * greybodies / (2.0 * np.pi) * time_conversion
+    dnde_pis = 2.0 * greybodies / (2.0 * np.pi) * TIME_CONVERSION
 
     return convolve_spectrum(
         photon_energies, pion_energies, dnde_pis, __dnde_charged_pion
@@ -240,8 +287,10 @@ def compute_charged_pion_spectrum(photon_energies, mpbh):
 
 
 def compute_electron_spectrum(
-    photon_energies, electron_energies, electron_dist
-):
+    photon_energies: List[float],
+    electron_energies: List[float],
+    electron_dist: List[float],
+) -> List[float]:
     """
     Compute the FSR spectrum off electron evaporated from a PBH.
     """
@@ -254,7 +303,11 @@ def compute_electron_spectrum(
     )
 
 
-def compute_muon_spectrum(photon_energies, muon_energies, muon_dist):
+def compute_muon_spectrum(
+    photon_energies: List[float],
+    muon_energies: List[float],
+    muon_dist: List[float],
+) -> List[float]:
     """
     Compute the FSR + decay spectrum off muon evaporated from a PBH.
     """
@@ -270,12 +323,44 @@ def compute_muon_spectrum(photon_energies, muon_energies, muon_dist):
     )
 
 
+def spectrum_geometic_approximation(
+    energies: List[float], mpbh: float, spin2: int
+) -> List[float]:
+    """
+    Compute the spectrum from a PBH using the geometric approximation.
+
+    Parameters
+    ----------
+    energies: array-like
+        Energies where the spectrum should be computed.
+    mpbh: float
+        Mass of the black hole in GeV.
+    spin2:
+        Twice the spin of the emitted particle.
+
+    Returns
+    -------
+    spec: array-like
+        Spectrum evaluated at `energies`.
+    """
+    eta = 1.0 if spin2 % 2 == 0 else -1.0
+    T = mass_to_temperature(mpbh)
+    greybodies = 27.0 * mpbh ** 2 * G_NEWTON ** 2 * energies ** 2
+    boltz = 1.0 / (np.exp(energies / T) - eta)
+
+    return greybodies * boltz / (2.0 * np.pi) * TIME_CONVERSION
+
+
 # ==============================
 # ---- Black Hawk Functions ----
 # ==============================
 
 
-class BlackHawk(object):
+class BlackHawk:
+    """
+    Class for running the BlackHawk code.
+    """
+
     def __init__(self, mpbh):
         """
         Initialize a BlackHawk runner object.
@@ -323,95 +408,11 @@ class BlackHawk(object):
             "proton": None,
         }
 
-    def run(self):
+    def __clean_dirs(self):
         """
-        Write the BlackHawk parameters file given the exponent of the black-hole
-        mass.
-
-        Parameters
-        ----------
-        exponent: float
-            Exponent of the black-hole mass, i.e. M_PBH = 10**exponent g.
-        directory: str
-            Directory name of the results relative to BlackHawk results directory.
+        Clean up the directories/files that were created by BlackHawk
+        and by `run`.
         """
-        # Save the current directory
-        cur_dir = os.path.abspath(os.getcwd())
-        # Move into the BlackHawk directory
-        os.chdir(self.path_to_blackhawk)
-
-        # Write a temporary parameter file for BlackHawk
-        par_file = os.path.join(self.path_to_blackhawk, "temp.txt")
-        lines = [
-            "destination_folder = TEMP\n",
-            "full_output = 1\n",
-            "interpolation_method = 0\n",
-            "BHnumber = 1\n",
-            f"Mmin = {self.mpbh}\n",
-            f"Mmax = {self.mpbh}\n",
-            "anumber = 1\n",
-            "amin = 0\n",
-            "amax = 0.5\n",
-            "spectrum_choice = 0\n",
-            "spectrum_choice_a = 0\n",
-            "amplitude_lognormal = 1.0\n",
-            "amplitude_lognormal2 = 1.0\n",
-            "stand_dev_lognormal = 1.0\n",
-            "crit_mass_lognormal = 1.0\n",
-            "amplitude_powerlaw = 1.0\n",
-            "eqstate_powerlaw = 0.3333\n",
-            "amplitude_critical_collapse = 1.0\n",
-            "crit_mass_critical_collapse = 1.0\n",
-            "amplitude_uniform = 1.0\n",
-            "stand_dev_a_gaussian = 1.0\n",
-            "mean_a_gaussian = 0.5\n",
-            "table = table.txt\n",
-            "tmin = 1e-30\n",
-            "limit = 5000\n",
-            f"Enumber = {self.num_primary_eng}\n",
-            f"Emin = {self.min_primary_eng}\n",
-            f"Emax = {self.max_primary_eng}\n",
-            "particle_number = 15\n",
-            "grav = 1\n",
-            "primary_only = 0\n",
-            "hadronization_choice = 2\n",
-        ]
-        with open(par_file, "w") as f:
-            f.writelines(lines)
-
-        # Run BlackHawk
-        subprocess.run(
-            "echo 'y' 'y' | ./BlackHawk_inst.x temp.txt",
-            shell=True,
-            stdout=subprocess.PIPE,
-        )
-
-        # Collect the primary and secondary spectra
-        data_primary = np.genfromtxt(
-            os.path.join(
-                self.path_to_blackhawk,
-                "results",
-                "TEMP",
-                "instantaneous_primary_spectra.txt",
-            ),
-            skip_header=2,
-        ).T
-        for i, key in enumerate(self.primary.keys()):
-            self.primary[key] = data_primary[i]
-
-        data_secondary = np.genfromtxt(
-            os.path.join(
-                self.path_to_blackhawk,
-                "results",
-                "TEMP",
-                "instantaneous_secondary_spectra.txt",
-            ),
-            skip_header=2,
-        ).T
-        for i, key in enumerate(self.secondary.keys()):
-            self.secondary[key] = data_secondary[i]
-
-        # Clean up
         results_files = [
             "BH_spectrum.txt",
             "instantaneous_primary_spectra.txt",
@@ -425,6 +426,111 @@ class BlackHawk(object):
             )
         os.rmdir(os.path.join(self.path_to_blackhawk, "results", "TEMP"))
 
+    def __write_parameter_file(self):
+        """
+        Write a temporary parameter file for BlackHawk.
+        """
+        par_file = os.path.join(self.path_to_blackhawk, "temp.txt")
+        with open(par_file, "w") as file:
+            file.writelines(
+                [
+                    "destination_folder = TEMP\n",
+                    "full_output = 1\n",
+                    "interpolation_method = 0\n",
+                    "BHnumber = 1\n",
+                    f"Mmin = {self.mpbh}\n",
+                    f"Mmax = {self.mpbh}\n",
+                    "anumber = 1\n",
+                    "amin = 0\n",
+                    "amax = 0.5\n",
+                    "spectrum_choice = 0\n",
+                    "spectrum_choice_a = 0\n",
+                    "amplitude_lognormal = 1.0\n",
+                    "amplitude_lognormal2 = 1.0\n",
+                    "stand_dev_lognormal = 1.0\n",
+                    "crit_mass_lognormal = 1.0\n",
+                    "amplitude_powerlaw = 1.0\n",
+                    "eqstate_powerlaw = 0.3333\n",
+                    "amplitude_critical_collapse = 1.0\n",
+                    "crit_mass_critical_collapse = 1.0\n",
+                    "amplitude_uniform = 1.0\n",
+                    "stand_dev_a_gaussian = 1.0\n",
+                    "mean_a_gaussian = 0.5\n",
+                    "table = table.txt\n",
+                    "tmin = 1e-30\n",
+                    "limit = 5000\n",
+                    f"Enumber = {self.num_primary_eng}\n",
+                    f"Emin = {self.min_primary_eng}\n",
+                    f"Emax = {self.max_primary_eng}\n",
+                    "particle_number = 15\n",
+                    "grav = 1\n",
+                    "primary_only = 0\n",
+                    "hadronization_choice = 2\n",
+                ]
+            )
+
+    def __read_results(self):
+        """
+        Read in and store the data produced from BlackHawk.
+        """
+        # Collect the primary spectra
+        data_primary = np.genfromtxt(
+            os.path.join(
+                self.path_to_blackhawk,
+                "results",
+                "TEMP",
+                "instantaneous_primary_spectra.txt",
+            ),
+            skip_header=2,
+        ).T
+        for i, key in enumerate(self.primary.keys()):
+            self.primary[key] = data_primary[i]
+
+        # Collect the secondary spectra
+        data_secondary = np.genfromtxt(
+            os.path.join(
+                self.path_to_blackhawk,
+                "results",
+                "TEMP",
+                "instantaneous_secondary_spectra.txt",
+            ),
+            skip_header=2,
+        ).T
+        for i, key in enumerate(self.secondary.keys()):
+            self.secondary[key] = data_secondary[i]
+
+    def run(self):
+        """
+        Write the BlackHawk parameters file given the exponent of the
+        black-hole mass.
+
+        Parameters
+        ----------
+        exponent: float
+            Exponent of the black-hole mass, i.e. M_PBH = 10**exponent g.
+        directory: str
+            Directory name of the results relative to BlackHawk results
+            directory.
+        """
+
+        # Save the current directory
+        cur_dir = os.path.abspath(os.getcwd())
+
+        # Move into the BlackHawk directory
+        os.chdir(self.path_to_blackhawk)
+
+        self.__write_parameter_file()
+
+        # Run BlackHawk. The two 'y' are to answer questions from
+        # BlackHawk.
+        subprocess.run(
+            "echo 'y' 'y' | ./BlackHawk_inst.x temp.txt",
+            shell=True,
+            stdout=subprocess.PIPE,
+        )
+
+        self.__read_results()
+        self.__clean_dirs()
+
         # Return to original directory
         os.chdir(cur_dir)
-
