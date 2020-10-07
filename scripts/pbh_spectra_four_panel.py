@@ -15,6 +15,7 @@ from utils import (
     compute_electron_spectrum,
     compute_muon_spectrum,
     compute_neutral_pion_spectrum,
+    spectrum_geometic_approximation,
     temperature_to_mass,
     BlackHawk,
     MASS_CONVERSION,
@@ -65,8 +66,18 @@ if __name__ == "__main__":
         primary_electron = blackhawk.primary["electron"]
         primary_muon = blackhawk.primary["muon"]
 
+        geom_photon = 2 * spectrum_geometic_approximation(
+            primary_energies, mpbh_gev, 2
+        )
+        geom_electron = 4 * spectrum_geometic_approximation(
+            primary_energies, mpbh_gev, 1
+        )
+
         dnde_electron = compute_electron_spectrum(
             primary_energies, primary_energies, primary_electron
+        )
+        dnde_electron_geom = compute_electron_spectrum(
+            primary_energies, primary_energies, geom_electron
         )
         dnde_muon = compute_muon_spectrum(
             primary_energies, primary_energies, primary_muon
@@ -144,6 +155,14 @@ if __name__ == "__main__":
             c="teal",
             lw=1,
         )
+        if i == 2 or i == 3:
+            ax.plot(
+                primary_energies * 1e3,
+                (dnde_electron_geom + geom_photon) * 1e-3,
+                ls="--",
+                c="k",
+                lw=1,
+            )
 
         X_LIMS = np.array([1e-6, blackhawk.max_primary_eng])
 
@@ -158,7 +177,7 @@ if __name__ == "__main__":
             ax.set_ylim(Y_LIMS)
             # ax.set_yticks(np.geomspace(Y_LIMS[0], Y_LIMS[1], 6))
         else:
-            Y_LIMS = np.array([1e14, 1e19])
+            Y_LIMS = np.array([1e15, 1e20])
             ax.set_ylim(Y_LIMS)
             # ax.set_yticks(np.geomspace(Y_LIMS[0], Y_LIMS[1], 6))
 
@@ -192,7 +211,9 @@ if __name__ == "__main__":
     #            labelbottom=True,
     #        )
 
+    ax3 = axes[1][0]
     ax4 = axes[1][1]
+
     lab = r"\begin{tabular}{cc}"
     lab += r"\quad & BlackHawk\\ \hline "
     lab += r"\ \ & Primary\\"
@@ -207,7 +228,7 @@ if __name__ == "__main__":
     lab += r"\end{tabular}"
 
     xs = np.array([2e-3, 1e-2]) * 1e3
-    ys = np.array([1e21, 3e20, 4e19, 1.3e19, 4e18, 1.5e18, 5e17, 3e19]) * 1e-3
+    ys = np.array([1e21, 3e20, 4e19, 1.3e19, 4e18, 1.5e18, 5e17, 3e19]) * 1e-2
 
     ax4.text(xs[0], ys[-1], lab, fontsize=9)
 
@@ -218,6 +239,26 @@ if __name__ == "__main__":
     ax4.plot(xs, [ys[4]] * 2, ls="-.", lw=1, c="mediumorchid")
     ax4.plot(xs, [ys[5]] * 2, ls=":", lw=1, c="Peru")
     ax4.plot(xs, [ys[6]] * 2, ls=":", lw=1, c="teal")
+
+    ax4.text(1.5e-3, 4e19, "Geometric Optics Approx.", fontsize=8)
+    ax4.annotate(
+        " ",
+        xytext=(2e-3, 4e19),
+        xy=(2e-3, 1e18),
+        fontsize=9,
+        arrowprops=dict(facecolor="black", arrowstyle="->"),
+    )
+
+    ax3.text(1e-1, 2e19, "Geometric Optics Approx.", fontsize=8)
+    ax3.annotate(
+        " ",
+        xytext=(1e1, 1.5e19),
+        xy=(1.5e0, 3e18),
+        fontsize=9,
+        arrowprops=dict(facecolor="black", arrowstyle="->"),
+    )
+
+    # ax4.text(1.5e-3, 2e19, "Geometric", fontsize=9)
 
     plt.tight_layout()
     # plt.show()
